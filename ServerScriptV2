@@ -1,0 +1,813 @@
+-- Script do servidor
+local Players = game:GetService("Players")
+local ServerStorage = game:GetService("ServerStorage")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
+local Debris = game:GetService("Debris")
+local TweenService = game:GetService("TweenService")
+
+
+local function getRemote(name, className)
+	local res = ReplicatedStorage:FindFirstChild(name)
+	if not res then
+		res = Instance.new(className)
+		res.Name = name
+		res.Parent = ReplicatedStorage
+	end
+	return res
+end
+
+
+local killerEvents = ReplicatedStorage:FindFirstChild("KillerEvents") or Instance.new("Folder", ReplicatedStorage)
+killerEvents.Name = "KillerEvents"
+local evBlood = getRemote("Blood", "RemoteEvent")
+evBlood.Parent = killerEvents
+local evHunter = getRemote("Hunter", "RemoteEvent")
+evHunter.Parent = killerEvents
+local evCorruption = getRemote("Corruption", "RemoteEvent")
+evCorruption.Parent = killerEvents
+local evReveal = getRemote("Reveal", "RemoteEvent")
+evReveal.Parent = killerEvents
+
+
+local toggleKillerUI = getRemote("ToggleKillerUI", "RemoteEvent")
+local genCompleted = getRemote("GeneratorCompleted", "RemoteEvent")
+local deathAnimEvent = getRemote("PlayDeathAnim", "RemoteEvent")
+
+
+local evBuy = getRemote("BuyCharacter", "RemoteFunction")
+local evEquip = getRemote("EquipCharacter", "RemoteFunction")
+local evGetData = getRemote("GetPlayerData", "RemoteFunction")
+local evLMS = getRemote("TriggerLMS", "RemoteEvent")
+
+
+local evGameOver = getRemote("GameOver", "RemoteEvent")
+local evUpdateCoins = getRemote("UpdateCoinsUI", "RemoteEvent")
+local evTransition = getRemote("MatchTransition", "RemoteEvent")
+
+
+-- Novos Remotes e Valores Especiais
+local evSpecialRoulette = getRemote("SpecialRoulette", "RemoteEvent")
+local evDash = getRemote("OneBounceDash", "RemoteEvent")
+local chaseThemeActive = getRemote("ChaseThemeActive", "BoolValue")
+chaseThemeActive.Value = true
+
+
+local status = getRemote("GameStatus", "StringValue")
+local timeLeft = getRemote("TimeLeft", "IntValue")
+local INTERMISSION_TIME = 30
+local ROUND_TIME = 180
+local MIN_PLAYERS = 2
+
+
+local inRound = false
+local activeKillers = {}
+local survivors = {}
+local killerStates = {}
+local specialMode = "Normal"
+local roundCount = 0
+
+
+local DEATH_ANIMS = {
+	["Killer1"] = {
+		Killer = "rbxassetid://76444565035845", -- Animação do Killer 1 matando
+		Victim = "rbxassetid://94168627728135", -- Animação da vítima morrendo pro Killer 1
+	},
+	["Killer2"] = {
+		Killer = "rbxassetid://131424657620770", -- Animação do Killer 2 matando
+		Victim = "rbxassetid://77499127574469", -- Animação da vítima morrendo pro Killer 2
+	}
+}
+
+local KILL_ATTACK_SOUND_ID = "rbxassetid://140462043853173"
+local EXECUTE_DURATION = 2.5
+
+
+local CHARACTERS = {
+	Survivors = {
+		["Survivor1"] = {Price = 0, Type = "Survivor", Speed = 16, Stamina = 100},
+		["Survivor2"] = {Price = 0, Type = "Survivor", Speed = 17, Stamina = 100},
+		["Survivor3"] = {Price = 500, Type = "Survivor", Speed = 16, Stamina = 100},
+		["Survivor4"] = {Price = 500, Type = "Survivor", Speed = 18, Stamina = 90},
+		["Survivor5"] = {Price = 0, Type = "Survivor", Speed = 23, Stamina = 55},
+	},
+	Killers = {
+		["Killer1"] = {Price = 0, Type = "Killer", Speed = 18, Stamina = 110},
+		["Killer2"] = {Price = 1000, Type = "Killer", Speed = 19, Stamina = 130},
+	}
+}
+
+
+local function awardCoins(player, amount, reason)
+	local data = player:FindFirstChild("PlayerData")
+	if data then
+		local coins = data:FindFirstChild("Coins")
+		if coins then
+			coins.Value = math.max(0, coins.Value + amount)
+			evUpdateCoins:FireClient(player, amount, reason)
+		end
+	end
+end
+
+
+Players.PlayerAdded:Connect(function(player)
+	local data = Instance.new("Folder", player)
+	data.Name = "PlayerData"
+
+	local coins = Instance.new("IntValue", data)
+	coins.Name = "Coins"
+	coins.Value = 2000
+
+	local owned = Instance.new("Folder", data)
+	owned.Name = "Owned"
+	Instance.new("StringValue", owned).Name = "Survivor1"
+	Instance.new("StringValue", owned).Name = "Survivor2"
+	Instance.new("StringValue", owned).Name = "Killer1"
+
+	local eqSurv = Instance.new("StringValue", data)
+	eqSurv.Name = "EquippedSurvivor"
+	eqSurv.Value = "Survivor1"
+
+	local eqKill = Instance.new("StringValue", data)
+	eqKill.Name = "EquippedKiller"
+	eqKill.Value = "Killer1"
+end)
+
+
+evGetData.OnServerInvoke = function(player)
+	local data = player:FindFirstChild("PlayerData")
+	if not data then return nil end
+
+	local ownedTable = {}
+	for _, v in ipairs(data.Owned:GetChildren()) do
+		ownedTable[v.Name] = true
+	end
+
+	return {
+		Coins = data.Coins.Value,
+		Owned = ownedTable,
+		EqSurvivor = data.EquippedSurvivor.Value,
+		EqKiller = data.EquippedKiller.Value
+	}
+end
+
+
+evBuy.OnServerInvoke = function(player, charName)
+	local data = player:FindFirstChild("PlayerData")
+	if not data then return false, "Erro de dados" end
+	if data.Owned:FindFirstChild(charName) then return false, "Já possui" end
+
+	local charInfo = CHARACTERS.Survivors[charName] or CHARACTERS.Killers[charName]
+	if not charInfo then return false, "Personagem não existe" end
+
+	if data.Coins.Value >= charInfo.Price then
+		data.Coins.Value -= charInfo.Price
+		Instance.new("StringValue", data.Owned).Name = charName
+		return true, "Comprado!"
+	else
+		return false, "Moedas insuficientes!"
+	end
+end
+
+
+evEquip.OnServerInvoke = function(player, charName)
+	local data = player:FindFirstChild("PlayerData")
+	if not data then return false end
+	if not data.Owned:FindFirstChild(charName) then return false end
+
+	if CHARACTERS.Survivors[charName] then
+		data.EquippedSurvivor.Value = charName
+		return true
+	elseif CHARACTERS.Killers[charName] then
+		data.EquippedKiller.Value = charName
+		return true
+	end
+	return false
+end
+
+
+local function setTransparency(char, value)
+	for _, part in ipairs(char:GetDescendants()) do
+		if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+			part.Transparency = value
+		elseif part:IsA("Decal") then
+			part.Transparency = value
+		end
+	end
+end
+
+
+local function showDamage(character, damage)
+	local head = character:FindFirstChild("Head")
+	if not head then return end
+
+	local billboard = Instance.new("BillboardGui")
+	billboard.Parent = head
+	billboard.Size = UDim2.new(0, 100, 0, 50)
+	billboard.StudsOffset = Vector3.new(0, 2, 0)
+	billboard.AlwaysOnTop = true
+
+	local textLabel = Instance.new("TextLabel")
+	textLabel.Parent = billboard
+	textLabel.Size = UDim2.new(1, 0, 1, 0)
+	textLabel.BackgroundTransparency = 1
+	textLabel.Text = "-" .. tostring(damage)
+	textLabel.TextColor3 = Color3.fromRGB(255, 50, 50)
+	textLabel.TextScaled = true
+	textLabel.Font = Enum.Font.FredokaOne
+
+	local tweenInfo = TweenInfo.new(1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+	TweenService:Create(billboard, tweenInfo, {StudsOffset = Vector3.new(0, 5, 0)}):Play()
+	TweenService:Create(textLabel, tweenInfo, {TextTransparency = 1}):Play()
+	Debris:AddItem(billboard, 1.2)
+end
+
+
+local function playAttackSound(attackerChar)
+	local root = attackerChar and (attackerChar:FindFirstChild("HumanoidRootPart") or attackerChar:FindFirstChild("Torso"))
+	if not root then return end
+
+	local sound = Instance.new("Sound")
+	sound.Name = "KillerAttackSound"
+	sound.SoundId = KILL_ATTACK_SOUND_ID
+	sound.Volume = 1
+	sound.RollOffMaxDistance = 60
+	sound.Parent = root
+	sound:Play()
+
+	Debris:AddItem(sound, 3)
+end
+
+
+local function triggerExecuteSequence(victimChar, attackerChar, attackerPlayer)
+	if not victimChar or not attackerChar then return end
+
+	local victimRoot = victimChar:FindFirstChild("HumanoidRootPart") or victimChar:FindFirstChild("Torso")
+	local attackerRoot = attackerChar:FindFirstChild("HumanoidRootPart") or attackerChar:FindFirstChild("Torso")
+
+	if victimRoot then victimRoot.Anchored = true end
+	if attackerRoot then attackerRoot.Anchored = true end
+
+	local killerType = "Killer1"
+	if attackerPlayer and attackerPlayer:FindFirstChild("PlayerData") then
+		killerType = attackerPlayer.PlayerData.EquippedKiller.Value
+	end
+
+	local anims = DEATH_ANIMS[killerType] or DEATH_ANIMS["Killer1"]
+
+	deathAnimEvent:FireAllClients(
+		victimChar,
+		attackerChar,
+		anims.Victim,
+		anims.Killer,
+		EXECUTE_DURATION
+	)
+
+	task.delay(EXECUTE_DURATION, function()
+		if victimChar and victimChar.Parent then
+			local root = victimChar:FindFirstChild("HumanoidRootPart") or victimChar:FindFirstChild("Torso")
+			if root then
+				local explosion = Instance.new("Explosion")
+				explosion.Position = root.Position
+				explosion.BlastRadius = 8
+				explosion.BlastPressure = 0
+				explosion.DestroyJointRadiusPercent = 1
+				explosion.Parent = Workspace
+			end
+			victimChar:Destroy()
+		end
+
+		if attackerRoot and attackerRoot.Parent then
+			attackerRoot.Anchored = false
+		end
+	end)
+end
+
+
+local function customDamage(humanoid, amount, attackerPlayer)
+	if humanoid.Health <= 0 then return end
+
+	if humanoid.Health - amount <= 0 then
+		local char = humanoid.Parent
+		if not char then return end
+
+		if char:GetAttribute("Executing") then return end
+		char:SetAttribute("Executing", true)
+
+		local root = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso")
+		if root then root.Anchored = true end
+
+		humanoid.Health = 1
+		humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
+
+		showDamage(char, amount)
+
+		if attackerPlayer and attackerPlayer.Character then
+			triggerExecuteSequence(char, attackerPlayer.Character, attackerPlayer)
+		else
+			task.delay(EXECUTE_DURATION, function()
+				if char and char.Parent then
+					local r = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso")
+					if r then
+						local explosion = Instance.new("Explosion")
+						explosion.Position = r.Position
+						explosion.BlastRadius = 8
+						explosion.BlastPressure = 0
+						explosion.DestroyJointRadiusPercent = 1
+						explosion.Parent = Workspace
+					end
+					char:Destroy()
+				end
+			end)
+		end
+
+		if attackerPlayer and table.find(activeKillers, attackerPlayer) then
+			awardCoins(attackerPlayer, 30, "Abate")
+		end
+
+		local victim = Players:GetPlayerFromCharacter(char)
+		if victim then
+			awardCoins(victim, -10, "Eliminado")
+		end
+	else
+		humanoid:TakeDamage(amount)
+		showDamage(humanoid.Parent, amount)
+	end
+end
+
+
+evBlood.OnServerEvent:Connect(function(player)
+	local char = player.Character
+	if not char or not table.find(activeKillers, player) or not inRound then return end
+	local root = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso")
+	if not root then return end
+
+	playAttackSound(char)
+
+	local isDash = killerStates[player] and killerStates[player].isHunter
+	if isDash then
+		killerStates[player].isHunter = false
+		local kName = player.PlayerData.EquippedKiller.Value
+		char.Humanoid.WalkSpeed = CHARACTERS.Killers[kName].Speed
+		setTransparency(char, 0)
+		root:ApplyImpulse(root.CFrame.LookVector * 1500)
+	end
+
+	local hitboxSize = isDash and Vector3.new(6, 6, 12) or Vector3.new(5, 5, 5)
+
+	-- Criando a Hitbox Visual com material ForceField
+	local visualHitbox = Instance.new("Part")
+	visualHitbox.Name = "BloodVisualHitbox"
+	visualHitbox.Size = hitboxSize
+	visualHitbox.Anchored = true
+	visualHitbox.CanCollide = false
+	visualHitbox.Material = Enum.Material.ForceField
+	visualHitbox.Color = Color3.fromRGB(255, 0, 0) -- Vermelho sangue
+	visualHitbox.Transparency = 0.3
+	visualHitbox.Parent = Workspace
+
+	local hitHas = {}
+	local duration = 0.5 -- A hitbox vai durar meio segundo (pode alterar se quiser)
+	local startTime = tick()
+
+	-- Loop que mantém a hitbox ativa, seguindo o jogador e causando dano contínuo
+	task.spawn(function()
+		while tick() - startTime < duration do
+			if not root or not root.Parent then break end -- Previne erros se o Killer morrer ou desconectar
+
+			local hitboxCFrame = root.CFrame * (isDash and CFrame.new(0, 0, -6) or CFrame.new(0, 0, -3))
+			visualHitbox.CFrame = hitboxCFrame -- A parte visual acompanha a movimentação do jogador
+
+			local parts = Workspace:GetPartBoundsInBox(hitboxCFrame, hitboxSize)
+			for _, p in ipairs(parts) do
+				local hum = p.Parent:FindFirstChild("Humanoid")
+				if hum and not hitHas[hum] and p.Parent ~= char then
+					hitHas[hum] = true
+					customDamage(hum, isDash and 30 or 20, player)
+				end
+			end
+			task.wait() -- Espera o próximo frame antes de checar de novo
+		end
+		visualHitbox:Destroy() -- Deleta a parte visual depois que o tempo acabar
+	end)
+end)
+
+
+evHunter.OnServerEvent:Connect(function(player)
+	local char = player.Character
+	if not char or not table.find(activeKillers, player) or not inRound then return end
+	if not killerStates[player] then killerStates[player] = {} end
+	killerStates[player].isHunter = true
+	char.Humanoid.WalkSpeed = 25
+	setTransparency(char, 1)
+end)
+
+
+evCorruption.OnServerEvent:Connect(function(player)
+	local char = player.Character
+	if not char or not table.find(activeKillers, player) or not inRound then return end
+	local root = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso")
+	if not root then return end
+
+	local effect = Instance.new("Part", Workspace)
+	effect.Shape = Enum.PartType.Ball
+	effect.Size = Vector3.new(1, 1, 1)
+	effect.Position = root.Position
+	effect.Anchored = true
+	effect.CanCollide = false
+	effect.Color = Color3.fromRGB(85, 0, 127)
+	effect.Material = Enum.Material.Neon
+	Debris:AddItem(effect, 1)
+	TweenService:Create(effect, TweenInfo.new(1), {Size = Vector3.new(30, 30, 30), Transparency = 1}):Play()
+
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p.Character and p ~= player then
+			local t = p.Character:FindFirstChild("HumanoidRootPart") or p.Character:FindFirstChild("Torso")
+			if t and (t.Position - root.Position).Magnitude <= 15 then
+				local hum = p.Character:FindFirstChild("Humanoid")
+				if hum then customDamage(hum, 15, player) end
+			end
+		end
+	end
+end)
+
+
+evReveal.OnServerEvent:Connect(function(player)
+	local char = player.Character
+	if not char or not table.find(activeKillers, player) or not inRound then return end
+	local originalSpeed = char.Humanoid.WalkSpeed
+	char.Humanoid.WalkSpeed = 8
+	task.delay(3, function()
+		if char and char:FindFirstChild("Humanoid") then
+			char.Humanoid.WalkSpeed = originalSpeed
+		end
+	end)
+
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p.Character and p ~= player then
+			local h = Instance.new("Highlight", p.Character)
+			h.FillColor = Color3.fromRGB(255, 0, 0)
+			h.OutlineColor = Color3.fromRGB(255, 255, 255)
+			h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+			Debris:AddItem(h, 5)
+		end
+	end
+end)
+
+
+-- Evento de Dash do Sobrevivente (One Bounce)
+evDash.OnServerEvent:Connect(function(player)
+	if specialMode ~= "OneBounce" then return end
+	if table.find(activeKillers, player) then return end
+
+	local char = player.Character
+	local root = char and (char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso"))
+	if root then
+		root:ApplyImpulse(root.CFrame.LookVector * 1500)
+	end
+end)
+
+
+genCompleted.OnServerEvent:Connect(function(player)
+	if inRound and timeLeft.Value > 0 then
+		timeLeft.Value = math.max(0, timeLeft.Value - 10)
+	end
+end)
+
+
+local function applyMorph(player, morphName, spawnPart)
+	local template = ServerStorage:FindFirstChild(morphName)
+	if not template then
+		warn("Faltou o modelo: " .. morphName)
+		return
+	end
+
+	local oldChar = player.Character or player.CharacterAdded:Wait()
+	local charClone = template:Clone()
+	charClone.Name = player.Name
+
+	local animate = oldChar:FindFirstChild("Animate")
+	if animate then
+		local newAnim = animate:Clone()
+		newAnim.Parent = charClone
+		newAnim.Disabled = true
+		task.delay(0.1, function()
+			newAnim.Disabled = false
+		end)
+	end
+
+	local hum = charClone:WaitForChild("Humanoid")
+	hum.BreakJointsOnDeath = false
+
+	for _, obj in ipairs(charClone:GetDescendants()) do
+		if obj:IsA("ProximityPrompt") then
+			obj:Destroy()
+		end
+	end
+
+	player.Character = charClone
+	charClone.Parent = Workspace
+
+	if spawnPart then
+		local root = charClone:FindFirstChild("HumanoidRootPart") or charClone:FindFirstChild("Torso")
+		if root then
+			root.CFrame = spawnPart.CFrame * CFrame.new(0, 3, 0)
+		end
+	end
+
+	oldChar:Destroy()
+end
+
+
+task.spawn(function()
+	while true do
+		inRound = false
+		table.clear(activeKillers)
+		table.clear(survivors)
+		table.clear(killerStates)
+		local lmsTriggered = false
+		local oneBounceLMSFired = false
+		specialMode = "Normal"
+		chaseThemeActive.Value = true
+
+		for i = INTERMISSION_TIME, 0, -1 do
+			status.Value = "Intermissão: " .. i .. "s"
+			task.wait(1)
+		end
+
+		local plrs = Players:GetPlayers()
+		if #plrs < MIN_PLAYERS then
+			status.Value = "Mínimo 2 jogadores!"
+			task.wait(3)
+			continue
+		end
+
+		-- Lógica da Roleta a cada 3 rounds
+		roundCount += 1
+		if roundCount % 3 == 0 then
+			local modes = {"OneBounce", "Espiao", "DoubleTrouble"}
+			if #plrs < 3 then
+				modes = {"OneBounce", "Espiao"}
+			end
+
+			specialMode = modes[math.random(1, #modes)]
+			evSpecialRoulette:FireAllClients(specialMode)
+			status.Value = "Sorteando Round Especial..."
+			task.wait(6)
+		end
+
+		if specialMode == "Espiao" then
+			chaseThemeActive.Value = false
+		end
+
+		status.Value = "Preparando a arena..."
+		evTransition:FireAllClients("FadeIn")
+		task.wait(1.5)
+
+		-- Atribuição de Papéis
+		if specialMode == "OneBounce" then
+			local theSurvivor = plrs[math.random(1, #plrs)]
+			table.insert(survivors, theSurvivor)
+			for _, p in ipairs(plrs) do
+				if p ~= theSurvivor then
+					table.insert(activeKillers, p)
+					killerStates[p] = {isHunter = false}
+				end
+			end
+		elseif specialMode == "DoubleTrouble" and #plrs >= 3 then
+			local k1 = plrs[math.random(1, #plrs)]
+			local k2
+			repeat
+				k2 = plrs[math.random(1, #plrs)]
+			until k2 ~= k1
+
+			table.insert(activeKillers, k1)
+			table.insert(activeKillers, k2)
+			killerStates[k1] = {isHunter = false}
+			killerStates[k2] = {isHunter = false}
+
+			for _, p in ipairs(plrs) do
+				if p ~= k1 and p ~= k2 then
+					table.insert(survivors, p)
+				end
+			end
+		else
+			local k = plrs[math.random(1, #plrs)]
+			table.insert(activeKillers, k)
+			killerStates[k] = {isHunter = false}
+			for _, p in ipairs(plrs) do
+				if p ~= k then
+					table.insert(survivors, p)
+				end
+			end
+		end
+
+		local spawnsFolder = Workspace:FindFirstChild("ArenaSpawns")
+		local spawnList = {}
+		if spawnsFolder then
+			spawnList = spawnsFolder:GetChildren()
+		else
+			local fallbackSpawn = Workspace:FindFirstChild("ArenaSpawn")
+			if fallbackSpawn then table.insert(spawnList, fallbackSpawn) end
+		end
+
+		for _, p in ipairs(plrs) do
+			local randomSpawn = nil
+			if #spawnList > 0 then
+				randomSpawn = spawnList[math.random(1, #spawnList)]
+			end
+
+			local isK = table.find(activeKillers, p) ~= nil
+
+			-- Setup Morphs e Habilidades
+			if specialMode == "Espiao" then
+				-- Não aplica morph, apenas teleporta
+				if randomSpawn then
+					local root = p.Character and (p.Character:FindFirstChild("HumanoidRootPart") or p.Character:FindFirstChild("Torso"))
+					if root then
+						root.CFrame = randomSpawn.CFrame * CFrame.new(0, 3, 0)
+					end
+				end
+
+				if isK then
+					local maxStam = CHARACTERS.Killers[p.PlayerData.EquippedKiller.Value].Stamina
+					task.delay(1, function()
+						toggleKillerUI:FireClient(p, true, maxStam)
+					end)
+				else
+					local maxStam = CHARACTERS.Survivors[p.PlayerData.EquippedSurvivor.Value].Stamina
+					toggleKillerUI:FireClient(p, false, maxStam)
+				end
+			else
+				if isK then
+					local kMorph = p.PlayerData.EquippedKiller.Value
+					applyMorph(p, kMorph, randomSpawn)
+					local maxStam = CHARACTERS.Killers[kMorph].Stamina
+					task.delay(1, function()
+						toggleKillerUI:FireClient(p, true, maxStam)
+					end)
+				else
+					local sMorph = p.PlayerData.EquippedSurvivor.Value
+					applyMorph(p, sMorph, randomSpawn)
+					local maxStam = CHARACTERS.Survivors[sMorph].Stamina
+					toggleKillerUI:FireClient(p, false, maxStam)
+				end
+			end
+
+			local char = p.Character
+			if char then
+				local hum = char:WaitForChild("Humanoid")
+				local root = char:WaitForChild("HumanoidRootPart")
+
+				-- BLOQUEIO INICIAL (Garante que fiquem travados)
+				hum.WalkSpeed = 0
+				hum.UseJumpPower = true
+				hum.JumpPower = 0
+				hum.JumpHeight = 0
+				root.Anchored = true -- Isso trava fisicamente o jogador no chão
+				hum:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
+
+				-- LOOP DE PERSISTÊNCIA (Evita que scripts locais resetem o JumpPower)
+				task.spawn(function()
+					for i = 1, 30 do -- Tenta forçar por alguns segundos
+						if not char or not char.Parent or inRound then break end
+						hum.JumpPower = 0
+						hum.WalkSpeed = 0
+						task.wait(0.2)
+					end
+				end)
+			end
+		end
+
+		evTransition:FireAllClients("Countdown", 5)
+		for i = 5, 1, -1 do
+			status.Value = "Começando em: " .. i
+			task.wait(1)
+		end
+
+		-- Unfreeze e Stats Extras (LIBERAÇÃO)
+		for _, p in ipairs(plrs) do
+			task.spawn(function()
+				local char = p.Character
+				if char then
+					local hum = char:FindFirstChild("Humanoid")
+					local root = char:FindFirstChild("HumanoidRootPart")
+					if hum and root then
+						root.Anchored = false -- Libera o movimento físico
+						hum:SetStateEnabled(Enum.HumanoidStateType.Jumping, true) -- Reabilita o estado de pulo
+						hum.UseJumpPower = true
+						hum.JumpPower = 50
+
+						local isK = table.find(activeKillers, p) ~= nil
+
+						if isK then
+							local kName = p.PlayerData.EquippedKiller.Value
+							hum.WalkSpeed = CHARACTERS.Killers[kName].Speed
+						else
+							local sName = p.PlayerData.EquippedSurvivor.Value
+							local sSpeed = CHARACTERS.Survivors[sName].Speed
+							if specialMode == "OneBounce" then
+								sSpeed = sSpeed + 6
+								hum.MaxHealth = 200
+								hum.Health = 200
+							end
+							hum.WalkSpeed = sSpeed
+						end
+					end
+				end
+			end)
+		end
+
+		evTransition:FireAllClients("FadeOut")
+		status.Value = "Partida Iniciada!"
+		timeLeft.Value = ROUND_TIME
+		inRound = true
+
+		while inRound and timeLeft.Value > 0 do
+			local aliveCount = 0
+			local lastAlivePlayer = nil
+			for _, s in ipairs(survivors) do
+				if s.Character and s.Character:FindFirstChild("Humanoid") and s.Character.Humanoid.Health > 1 then
+					aliveCount += 1
+					lastAlivePlayer = s
+				end
+			end
+
+			local killersAlive = 0
+			for _, k in ipairs(activeKillers) do
+				if k.Character and k.Character:FindFirstChild("Humanoid") and k.Character.Humanoid.Health > 1 then
+					killersAlive += 1
+				end
+			end
+
+			if aliveCount == 0 then
+				status.Value = "O Assassino Venceu!"
+				for _, k in ipairs(activeKillers) do
+					awardCoins(k, 50, "Vitória")
+				end
+				evGameOver:FireAllClients("Killer")
+				task.wait(2)
+				break
+			end
+
+			if killersAlive == 0 then
+				status.Value = "Sobreviventes Venceram!"
+				for _, s in ipairs(survivors) do
+					if s.Character and s.Character:FindFirstChild("Humanoid") and s.Character.Humanoid.Health > 1 then
+						awardCoins(s, 50, "Vitória")
+					end
+				end
+				evGameOver:FireAllClients("Survivor")
+				task.wait(2)
+				break
+			end
+
+			-- Force LMS depois de 10s para OneBounce
+			if specialMode == "OneBounce" and (ROUND_TIME - timeLeft.Value) >= 10 and not oneBounceLMSFired then
+				oneBounceLMSFired = true
+				timeLeft.Value = 90
+				status.Value = "LAST MAN STANDING!"
+				local kName = activeKillers[1] and activeKillers[1].PlayerData.EquippedKiller.Value or "Killer1"
+				local sName = lastAlivePlayer and lastAlivePlayer.PlayerData.EquippedSurvivor.Value or "Survivor1"
+				evLMS:FireAllClients(kName, sName)
+				lmsTriggered = true
+			end
+
+			if aliveCount == 1 and not lmsTriggered and specialMode ~= "OneBounce" then
+				lmsTriggered = true
+				timeLeft.Value = 90
+				status.Value = "LAST MAN STANDING!"
+				local kName = activeKillers[1].PlayerData.EquippedKiller.Value
+				local sName = lastAlivePlayer.PlayerData.EquippedSurvivor.Value
+				evLMS:FireAllClients(kName, sName)
+			end
+
+			local mins, secs = math.floor(timeLeft.Value / 60), timeLeft.Value % 60
+			status.Value = lmsTriggered and string.format("LMS - %02d:%02d", mins, secs) or string.format("Tempo: %02d:%02d", mins, secs)
+			task.wait(1)
+			timeLeft.Value -= 1
+		end
+
+		inRound = false
+		evLMS:FireAllClients("STOP", "STOP")
+
+		evTransition:FireAllClients("FadeIn")
+		task.wait(1.5)
+
+		for _, p in ipairs(Players:GetPlayers()) do
+			toggleKillerUI:FireClient(p, false, 100)
+			p:LoadCharacter()
+			task.wait(0.1)
+			local lobby = Workspace:FindFirstChild("LobbySpawn")
+			if p.Character and p.Character:FindFirstChild("Humanoid") then
+				p.Character.Humanoid.WalkSpeed = 16
+			end
+			if p.Character and lobby then
+				p.Character:PivotTo(lobby.CFrame)
+			end
+		end
+
+		evTransition:FireAllClients("FadeOut")
+	end
+end)
+print("ServerSide Script loaded with Success!")
