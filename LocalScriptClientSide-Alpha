@@ -13,10 +13,18 @@ local playerGui = player:WaitForChild("PlayerGui")
 local mouse = player:GetMouse()
 
 local killerEvents = ReplicatedStorage:WaitForChild("KillerEvents")
+local evBlood = killerEvents:WaitForChild("Blood")
+local evHunter = killerEvents:WaitForChild("Hunter")
+local evCorruption = killerEvents:WaitForChild("Corruption")
+local evReveal = killerEvents:WaitForChild("Reveal")
+-- NOVOS REMOTES KILLER 2
+local evBite = killerEvents:WaitForChild("Bite")
+local evDeploy = killerEvents:WaitForChild("Deploy")
+local evDrak = killerEvents:WaitForChild("Drak")
+
 local survEvents = ReplicatedStorage:WaitForChild("SurvEvents")
 local evSurv1Reveal = survEvents:WaitForChild("Surv1Reveal")
 local evSurv2Throw = survEvents:WaitForChild("Surv2Throw")
--- NOVOS REMOTES
 local evSurv3RingShot = survEvents:WaitForChild("Surv3RingShot")
 local evSurv4Block = survEvents:WaitForChild("Surv4Block")
 local evSurv5Wall = survEvents:WaitForChild("Surv5Wall")
@@ -87,14 +95,17 @@ local ANIMS = {
 	Hunter = "rbxassetid://84366199189067",
 	Corruption = "rbxassetid://114851128878636",
 	Reveal = "rbxassetid://82902596805128",
-	SurvThrow = "rbxassetid://99897292142838", -- Mude o ID para a sua animação de jogar o bloco
-	-- NOVAS ANIMAÇÕES
+	SurvThrow = "rbxassetid://99897292142838",
 	Surv3_RS_Start = "rbxassetid://139632206569416", 
 	Surv3_RS_Loop = "rbxassetid://100142332279804",
 	Surv3_RS_Fire = "rbxassetid://112929657934324",
 	Surv4_Block = "rbxassetid://101422011911996",
 	Surv5_WallSummon = "rbxassetid://87908298657022",
 	Killer_Stun_Loop = "rbxassetid://76753897897441",
+	-- ANIMAÇÕES KILLER 2 (Coloque seus IDs reais aqui)
+	K2_Bite = "rbxassetid://83096218477188",
+	K2_Deploy = "rbxassetid://115316040311705",
+	K2_Drak = "rbxassetid://89252775147671",
 }
 
 local DEATH_ANIMS = {
@@ -115,7 +126,6 @@ local abilityButtons = {
 	["Reveal"] = ui:WaitForChild("aBILITYES"):WaitForChild("BtnReveal"),
 }
 
--- Cria/Referencia dinamicamente os botões dos Survivors caso você não os tenha fisicamente na GUI
 local survAbilityButtons = {}
 for i = 1, 5 do
 	local bName = "BtnSurvivor" .. i
@@ -124,7 +134,7 @@ for i = 1, 5 do
 		btn = Instance.new("ImageButton")
 		btn.Name = bName
 		btn.Size = UDim2.new(0, 60, 0, 60)
-		btn.Position = UDim2.new(0.5, -30, 0.8, 0) -- Centralizado
+		btn.Position = UDim2.new(0.5, -30, 0.8, 0)
 		btn.BackgroundTransparency = 1
 		btn.Visible = false
 		btn.Parent = ui:WaitForChild("aBILITYES")
@@ -152,12 +162,13 @@ end
 
 local originalKeys = {
 	["Blood"] = "M1", ["Hunter"] = "E", ["Corruption"] = "R", ["Reveal"] = "F",
+	["Bite"] = "E", ["Deploy"] = "R", ["Drak"] = "F",
 	["Survivor1"] = "Q", ["Survivor2"] = "Q", ["Survivor3"] = "Q", ["Survivor4"] = "Q", ["Survivor5"] = "Q"
 }
 
--- Adicionado Cooldowns para Surv3, 4 e 5
-local cd = {Blood = 0, Hunter = 0, Corruption = 0, Reveal = 0, Dash = 0, Survivor1 = 0, Survivor2 = 0, Survivor3 = 0, Survivor4 = 0, Survivor5 = 0}
-local times = {Blood = 2, Hunter = 15, Corruption = 10, Reveal = 20, Dash = 16, Survivor1 = 50, Survivor2 = 15, Survivor3 = 20, Survivor4 = 15, Survivor5 = 30}
+-- Cooldowns atualizados
+local cd = {Blood = 0, Hunter = 0, Corruption = 0, Reveal = 0, Bite = 0, Deploy = 0, Drak = 0, Dash = 0, Survivor1 = 0, Survivor2 = 0, Survivor3 = 0, Survivor4 = 0, Survivor5 = 0}
+local times = {Blood = 2, Hunter = 15, Corruption = 10, Reveal = 20, Bite = 8, Deploy = 15, Drak = 25, Dash = 16, Survivor1 = 50, Survivor2 = 20, Survivor3 = 60, Survivor4 = 50, Survivor5 = 45}
 local isExecutingAny = false 
 
 -------------------------------------------------------------------
@@ -428,9 +439,6 @@ local function buildShopUI()
 	coinLbl.Parent = bg
 	Instance.new("UICorner", coinLbl).CornerRadius = UDim.new(0, 8)
 
-	-------------------------------------------------------------------
-	-- SISTEMA DE ABAS (TABS)
-	-------------------------------------------------------------------
 	local tabContainer = Instance.new("Frame")
 	tabContainer.Name = "TabContainer"
 	tabContainer.Size = UDim2.new(0.65, 0, 0.08, 0)
@@ -482,9 +490,6 @@ local function buildShopUI()
 		scroll.CanvasSize = UDim2.new(0, 0, 0, grid.AbsoluteContentSize.Y + 20)
 	end)
 
-	-------------------------------------------------------------------
-	-- INFOPANEL AJUSTADO PARA SKINS
-	-------------------------------------------------------------------
 	local infoPanel = Instance.new("Frame")
 	infoPanel.Name = "InfoPanel"
 	infoPanel.Size = UDim2.new(0.28, 0, 0.8, 0)
@@ -674,9 +679,6 @@ local function buildShopUI()
 		Instance.new("UICorner", st).CornerRadius = UDim.new(0, 4)
 	end
 
-	-------------------------------------------------------------------
-	-- LÓGICA DE ALTERNAR ABAS
-	-------------------------------------------------------------------
 	local function updateTabs(selected)
 		if selected == "Survivors" then
 			btnSurvTab.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
@@ -796,7 +798,6 @@ local function updateAbilityUI()
 	for n,b in pairs(survAbilityButtons) do allButtons[n] = b end
 
 	for name, btn in pairs(allButtons) do
-		-- Só atualiza o visual se o botão estiver visível no momento
 		if not btn.Visible then continue end
 
 		local label = btn:FindFirstChild("KeyBindLabel")
@@ -804,7 +805,15 @@ local function updateAbilityUI()
 
 		if not label then continue end
 
-		local timeLeft = (times[name] or 0) - (tick() - (cd[name] or 0))
+		-- Como reutilizamos botões para o Killer2, verificamos o map dinâmico 
+		local actualSkillName = name
+		if currentRole == "Killer" and currentCharName == "Killer2" then
+			if name == "Hunter" then actualSkillName = "Bite" end
+			if name == "Corruption" then actualSkillName = "Deploy" end
+			if name == "Reveal" then actualSkillName = "Drak" end
+		end
+
+		local timeLeft = (times[actualSkillName] or 0) - (tick() - (cd[actualSkillName] or 0))
 
 		if isExecutingAny then
 			if lockIcon then lockIcon.Visible = true end
@@ -818,7 +827,7 @@ local function updateAbilityUI()
 		else
 			if lockIcon then lockIcon.Visible = false end
 			label.Visible = true
-			label.Text = originalKeys[name] or "Q"
+			label.Text = originalKeys[actualSkillName] or "Q"
 			btn.ImageColor3 = Color3.fromRGB(255, 255, 255)
 		end
 	end
@@ -985,7 +994,7 @@ if player.Character then
 end
 
 -------------------------------------------------------------------
--- ANIMAÇÃO DE MORTE ATUALIZADA COM SUPORTE AOS KILLERS (1 e 2)
+-- ANIMAÇÃO DE MORTE
 -------------------------------------------------------------------
 
 deathAnimEvent.OnClientEvent:Connect(function(victimChar, killerChar, arg3, arg4, duration)
@@ -1043,9 +1052,9 @@ deathAnimEvent.OnClientEvent:Connect(function(victimChar, killerChar, arg3, arg4
 	end)
 end)
 
--- Nova função para usar as habilidades dos sobreviventes (COMPLETA 1 AO 5)
 local function useSurvAbility(abilityName)
 	if isExecutingAny then return end 
+	if player.Character and player.Character:GetAttribute("AbilitiesLocked") then return end -- Bloqueio do Bite
 	if tick() - cd[abilityName] < times[abilityName] then return end
 
 	isExecutingAny = true
@@ -1053,7 +1062,6 @@ local function useSurvAbility(abilityName)
 
 	task.spawn(function()
 		if abilityName == "Survivor1" then
-			-- Revela posição dos Killers
 			local revealed = evSurv1Reveal:InvokeServer()
 			if revealed then
 				for _, kChar in ipairs(revealed) do
@@ -1062,18 +1070,16 @@ local function useSurvAbility(abilityName)
 					h.OutlineColor = Color3.fromRGB(255, 255, 255)
 					h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
 					h.Parent = kChar
-					game.Debris:AddItem(h, 5) -- Duração do Reveal
+					game.Debris:AddItem(h, 5) 
 				end
 			end
 
 		elseif abilityName == "Survivor2" then
-			-- Joga Bloco neon
 			playAnim(ANIMS.SurvThrow, 2)
 			local targetPos = mouse.Hit.Position
 			evSurv2Throw:FireServer(targetPos)
 
 		elseif abilityName == "Survivor3" then
-			-- RingShot: Tira arma -> Loop -> Atira
 			playCharacterAnim(player.Character, ANIMS.Surv3_RS_Start, 0.1, 1)
 			task.wait(0.6)
 			local loopTrack = playCharacterAnim(player.Character, ANIMS.Surv3_RS_Loop, 0.1, 1)
@@ -1083,7 +1089,6 @@ local function useSurvAbility(abilityName)
 			evSurv3RingShot:FireServer()
 
 		elseif abilityName == "Survivor4" then
-			-- Block: Animação e ativação do bloqueio (Duração de 3 segundos no servidor)
 			playCharacterAnim(player.Character, ANIMS.Surv4_Block, 0.1, 1)
 			evSurv4Block:FireServer(true)
 			task.delay(3, function()
@@ -1091,14 +1096,13 @@ local function useSurvAbility(abilityName)
 			end)
 
 		elseif abilityName == "Survivor5" then
-			-- Parede de Studs: Animação -> Fica Parado por 5s -> Invoca
 			playCharacterAnim(player.Character, ANIMS.Surv5_WallSummon, 0.1, 1)
 			local char = player.Character
 			if char then
 				local hum = char:FindFirstChildOfClass("Humanoid")
 				if hum then
 					local oldSpeed = hum.WalkSpeed
-					hum.WalkSpeed = 0 -- Fica parado durante a invocação
+					hum.WalkSpeed = 0
 					task.wait(5)
 					hum.WalkSpeed = oldSpeed
 					evSurv5Wall:FireServer()
@@ -1120,22 +1124,31 @@ local function use(ability)
 	task.spawn(function()
 		if ability == "Blood" then
 			playAnim(ANIMS.Blood, 0.5)
-			killerEvents.Blood:FireServer()
+			evBlood:FireServer()
 		elseif ability == "Hunter" then
 			playAnim(ANIMS.Hunter, 5)
-			killerEvents.Hunter:FireServer()
+			evHunter:FireServer()
 		elseif ability == "Corruption" then
 			playAnim(ANIMS.Corruption, 1)
-			killerEvents.Corruption:FireServer()
+			evCorruption:FireServer()
 		elseif ability == "Reveal" then
 			TweenService:Create(camera, TweenInfo.new(0.5), {FieldOfView = 100}):Play()
 			playAnim(ANIMS.Reveal, 2)
-			killerEvents.Reveal:FireServer()
+			evReveal:FireServer()
 			task.delay(0.5, function()
 				if camera then
 					TweenService:Create(camera, TweenInfo.new(0.5), {FieldOfView = 70}):Play()
 				end
 			end)
+		elseif ability == "Bite" then
+			playAnim(ANIMS.K2_Bite, 1)
+			evBite:FireServer()
+		elseif ability == "Deploy" then
+			playAnim(ANIMS.K2_Deploy, 3)
+			evDeploy:FireServer()
+		elseif ability == "Drak" then
+			playAnim(ANIMS.K2_Drak, 1)
+			evDrak:FireServer()
 		end
 
 		isExecutingAny = false
@@ -1147,33 +1160,32 @@ UserInputService.InputBegan:Connect(function(input, proc)
 
 	if ui.Enabled then
 		if currentRole == "Killer" then
-			if input.UserInputType == Enum.UserInputType.MouseButton1 then
-				use("Blood")
-			elseif input.KeyCode == Enum.KeyCode.E then
-				use("Hunter")
-			elseif input.KeyCode == Enum.KeyCode.R then
-				use("Corruption")
-			elseif input.KeyCode == Enum.KeyCode.F then
-				use("Reveal")
+			if currentCharName == "Killer1" then
+				if input.UserInputType == Enum.UserInputType.MouseButton1 then use("Blood")
+				elseif input.KeyCode == Enum.KeyCode.E then use("Hunter")
+				elseif input.KeyCode == Enum.KeyCode.R then use("Corruption")
+				elseif input.KeyCode == Enum.KeyCode.F then use("Reveal")
+				end
+			elseif currentCharName == "Killer2" then
+				if input.UserInputType == Enum.UserInputType.MouseButton1 then use("Blood")
+				elseif input.KeyCode == Enum.KeyCode.E then use("Bite")
+				elseif input.KeyCode == Enum.KeyCode.R then use("Deploy")
+				elseif input.KeyCode == Enum.KeyCode.F then use("Drak")
+				end
 			end
 		elseif currentRole == "Survivor" then
-			-- Ativação da habilidade do Sobrevivente na tecla Q (Todos do 1 ao 5)
 			if input.KeyCode == Enum.KeyCode.Q then
-				if currentCharName == "Survivor1" then
-					useSurvAbility("Survivor1")
-				elseif currentCharName == "Survivor2" then
-					useSurvAbility("Survivor2")
-				elseif currentCharName == "Survivor3" then
-					useSurvAbility("Survivor3")
-				elseif currentCharName == "Survivor4" then
-					useSurvAbility("Survivor4")
-				elseif currentCharName == "Survivor5" then
-					useSurvAbility("Survivor5")
+				if currentCharName == "Survivor1" then useSurvAbility("Survivor1")
+				elseif currentCharName == "Survivor2" then useSurvAbility("Survivor2")
+				elseif currentCharName == "Survivor3" then useSurvAbility("Survivor3")
+				elseif currentCharName == "Survivor4" then useSurvAbility("Survivor4")
+				elseif currentCharName == "Survivor5" then useSurvAbility("Survivor5")
 				end
 			end
 		end
 	else
 		if input.KeyCode == Enum.KeyCode.E and currentSpecialMode == "OneBounce" and not string.find(gameStatus.Value, "Intermissão") and gameStatus.Value ~= "Preparando a arena..." then
+			if player.Character and player.Character:GetAttribute("AbilitiesLocked") then return end
 			if tick() - cd.Dash >= times.Dash then
 				cd.Dash = tick()
 				evDash:FireServer()
@@ -1192,12 +1204,10 @@ toggleEvent.OnClientEvent:Connect(function(role, charName, stamina)
 	currentRole = role
 	currentCharName = charName
 
-	-- Esconde botões do Killer se for Survivor (e vice-versa)
 	for name, btn in pairs(abilityButtons) do
 		btn.Visible = (currentRole == "Killer")
 	end
 
-	-- Habilita o botão exato do sobrevivente
 	for name, btn in pairs(survAbilityButtons) do
 		btn.Visible = (currentRole == "Survivor" and name == currentCharName)
 	end
