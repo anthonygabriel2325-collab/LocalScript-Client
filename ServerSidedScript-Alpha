@@ -7,7 +7,6 @@ local Debris = game:GetService("Debris")
 local TweenService = game:GetService("TweenService")
 local PhysicsService = game:GetService("PhysicsService")
 
--- Adicionando Grupos de Colisão para a Parede do Survivor 5
 pcall(function()
 	PhysicsService:RegisterCollisionGroup("Survivors")
 	PhysicsService:RegisterCollisionGroup("Killers")
@@ -15,7 +14,6 @@ pcall(function()
 	PhysicsService:CollisionGroupSetCollidable("Walls", "Survivors", false)
 	PhysicsService:CollisionGroupSetCollidable("Walls", "Killers", true)
 end)
-
 
 local function getRemote(name, className)
 	local res = ReplicatedStorage:FindFirstChild(name)
@@ -26,7 +24,6 @@ local function getRemote(name, className)
 	end
 	return res
 end
-
 
 local killerEvents = ReplicatedStorage:FindFirstChild("KillerEvents") or Instance.new("Folder", ReplicatedStorage)
 killerEvents.Name = "KillerEvents"
@@ -39,15 +36,20 @@ evCorruption.Parent = killerEvents
 local evReveal = getRemote("Reveal", "RemoteEvent")
 evReveal.Parent = killerEvents
 
--- Novos Remotes para Sobreviventes
+-- Remotes Killer 2
+local evBite = getRemote("Bite", "RemoteEvent")
+evBite.Parent = killerEvents
+local evDeploy = getRemote("Deploy", "RemoteEvent")
+evDeploy.Parent = killerEvents
+local evDrak = getRemote("Drak", "RemoteEvent")
+evDrak.Parent = killerEvents
+
 local survEvents = ReplicatedStorage:FindFirstChild("SurvEvents") or Instance.new("Folder", ReplicatedStorage)
 survEvents.Name = "SurvEvents"
 local evSurv1Reveal = getRemote("Surv1Reveal", "RemoteFunction")
 evSurv1Reveal.Parent = survEvents
 local evSurv2Throw = getRemote("Surv2Throw", "RemoteEvent")
 evSurv2Throw.Parent = survEvents
-
--- Remotes Habilidades 3, 4 e 5
 local evSurv3RingShot = getRemote("Surv3RingShot", "RemoteEvent")
 evSurv3RingShot.Parent = survEvents
 local evSurv4Block = getRemote("Surv4Block", "RemoteEvent")
@@ -55,29 +57,23 @@ evSurv4Block.Parent = survEvents
 local evSurv5Wall = getRemote("Surv5Wall", "RemoteEvent")
 evSurv5Wall.Parent = survEvents
 
-
 local toggleKillerUI = getRemote("ToggleKillerUI", "RemoteEvent")
 local genCompleted = getRemote("GeneratorCompleted", "RemoteEvent")
 local deathAnimEvent = getRemote("PlayDeathAnim", "RemoteEvent")
-
 
 local evBuy = getRemote("BuyCharacter", "RemoteFunction")
 local evEquip = getRemote("EquipCharacter", "RemoteFunction")
 local evGetData = getRemote("GetPlayerData", "RemoteFunction")
 local evLMS = getRemote("TriggerLMS", "RemoteEvent")
 
-
 local evGameOver = getRemote("GameOver", "RemoteEvent")
 local evUpdateCoins = getRemote("UpdateCoinsUI", "RemoteEvent")
 local evTransition = getRemote("MatchTransition", "RemoteEvent")
 
-
--- Novos Remotes e Valores Especiais
 local evSpecialRoulette = getRemote("SpecialRoulette", "RemoteEvent")
 local evDash = getRemote("OneBounceDash", "RemoteEvent")
 local chaseThemeActive = getRemote("ChaseThemeActive", "BoolValue")
 chaseThemeActive.Value = true
-
 
 local status = getRemote("GameStatus", "StringValue")
 local timeLeft = getRemote("TimeLeft", "IntValue")
@@ -85,14 +81,12 @@ local INTERMISSION_TIME = 30
 local ROUND_TIME = 180
 local MIN_PLAYERS = 2
 
-
 local inRound = false
 local activeKillers = {}
 local survivors = {}
 local killerStates = {}
 local specialMode = "Normal"
 local roundCount = 0
-
 
 local DEATH_ANIMS = {
 	["Killer1"] = {
@@ -108,7 +102,6 @@ local DEATH_ANIMS = {
 local KILL_ATTACK_SOUND_ID = "rbxassetid://140462043853173"
 local EXECUTE_DURATION = 2.5
 
-
 local CHARACTERS = {
 	Survivors = {
 		["Survivor1"] = {Price = 0, Type = "Survivor", Speed = 16, Stamina = 100},
@@ -123,6 +116,9 @@ local CHARACTERS = {
 	}
 }
 
+local function checkAbilitiesLocked(player)
+	return player.Character and player.Character:GetAttribute("AbilitiesLocked")
+end
 
 local function awardCoins(player, amount, reason)
 	local data = player:FindFirstChild("PlayerData")
@@ -134,7 +130,6 @@ local function awardCoins(player, amount, reason)
 		end
 	end
 end
-
 
 Players.PlayerAdded:Connect(function(player)
 	local data = Instance.new("Folder", player)
@@ -159,7 +154,6 @@ Players.PlayerAdded:Connect(function(player)
 	eqKill.Value = "Killer1"
 end)
 
-
 evGetData.OnServerInvoke = function(player)
 	local data = player:FindFirstChild("PlayerData")
 	if not data then return nil end
@@ -176,7 +170,6 @@ evGetData.OnServerInvoke = function(player)
 		EqKiller = data.EquippedKiller.Value
 	}
 end
-
 
 evBuy.OnServerInvoke = function(player, charName)
 	local data = player:FindFirstChild("PlayerData")
@@ -195,7 +188,6 @@ evBuy.OnServerInvoke = function(player, charName)
 	end
 end
 
-
 evEquip.OnServerInvoke = function(player, charName)
 	local data = player:FindFirstChild("PlayerData")
 	if not data then return false end
@@ -211,7 +203,6 @@ evEquip.OnServerInvoke = function(player, charName)
 	return false
 end
 
-
 local function setTransparency(char, value)
 	for _, part in ipairs(char:GetDescendants()) do
 		if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
@@ -221,7 +212,6 @@ local function setTransparency(char, value)
 		end
 	end
 end
-
 
 local function showDamage(character, damage)
 	local head = character:FindFirstChild("Head")
@@ -248,7 +238,6 @@ local function showDamage(character, damage)
 	Debris:AddItem(billboard, 1.2)
 end
 
-
 local function playAttackSound(attackerChar)
 	local root = attackerChar and (attackerChar:FindFirstChild("HumanoidRootPart") or attackerChar:FindFirstChild("Torso"))
 	if not root then return end
@@ -263,7 +252,6 @@ local function playAttackSound(attackerChar)
 
 	Debris:AddItem(sound, 3)
 end
-
 
 local function triggerExecuteSequence(victimChar, attackerChar, attackerPlayer)
 	if not victimChar or not attackerChar then return end
@@ -309,11 +297,9 @@ local function triggerExecuteSequence(victimChar, attackerChar, attackerPlayer)
 	end)
 end
 
-
 local function customDamage(humanoid, amount, attackerPlayer)
 	if humanoid.Health <= 0 then return end
 
-	-- Lógica Habilidade Survivor 4 (Block)
 	local char = humanoid.Parent
 	if char and char:GetAttribute("Blocking") then
 		humanoid.WalkSpeed = humanoid.WalkSpeed + 3
@@ -339,7 +325,7 @@ local function customDamage(humanoid, amount, attackerPlayer)
 
 		showDamage(char, amount)
 
-		if attackerPlayer and attackerPlayer.Character then
+		if attackerPlayer and table.find(activeKillers, attackerPlayer) then
 			triggerExecuteSequence(char, attackerPlayer.Character, attackerPlayer)
 		else
 			task.delay(EXECUTE_DURATION, function()
@@ -371,7 +357,6 @@ local function customDamage(humanoid, amount, attackerPlayer)
 		showDamage(humanoid.Parent, amount)
 	end
 end
-
 
 evBlood.OnServerEvent:Connect(function(player)
 	local char = player.Character
@@ -415,7 +400,6 @@ evBlood.OnServerEvent:Connect(function(player)
 
 			local parts = Workspace:GetPartBoundsInBox(hitboxCFrame, hitboxSize)
 			for _, p in ipairs(parts) do
-				-- Lógica Habilidade Survivor 5 (Destruir a Parede)
 				if p.Name == "SurvWall" then
 					local pos = p.Position
 					p:Destroy()
@@ -433,7 +417,7 @@ evBlood.OnServerEvent:Connect(function(player)
 						frag.Parent = Workspace
 						Debris:AddItem(frag, 2)
 					end
-					break -- Impede que o ataque atravesse a parede se acertar ela
+					break 
 				end
 
 				local hum = p.Parent:FindFirstChild("Humanoid")
@@ -448,7 +432,6 @@ evBlood.OnServerEvent:Connect(function(player)
 	end)
 end)
 
-
 evHunter.OnServerEvent:Connect(function(player)
 	local char = player.Character
 	if not char or not table.find(activeKillers, player) or not inRound then return end
@@ -457,7 +440,6 @@ evHunter.OnServerEvent:Connect(function(player)
 	char.Humanoid.WalkSpeed = 25
 	setTransparency(char, 1)
 end)
-
 
 evCorruption.OnServerEvent:Connect(function(player)
 	local char = player.Character
@@ -487,7 +469,6 @@ evCorruption.OnServerEvent:Connect(function(player)
 	end
 end)
 
-
 evReveal.OnServerEvent:Connect(function(player)
 	local char = player.Character
 	if not char or not table.find(activeKillers, player) or not inRound then return end
@@ -510,9 +491,216 @@ evReveal.OnServerEvent:Connect(function(player)
 	end
 end)
 
+-------------------------------------------------------------------
+-- HABILIDADES EXCLUSIVAS KILLER 2
+-------------------------------------------------------------------
+evBite.OnServerEvent:Connect(function(player)
+	local char = player.Character
+	if not char or not table.find(activeKillers, player) or not inRound then return end
+	local root = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso")
+	if not root then return end
 
--- Habilidades dos Sobreviventes
+	playAttackSound(char)
+
+	local hitboxSize = Vector3.new(5, 5, 6)
+	local visualHitbox = Instance.new("Part")
+	visualHitbox.Name = "BiteVisualHitbox"
+	visualHitbox.Size = hitboxSize
+	visualHitbox.Anchored = true
+	visualHitbox.CanCollide = false
+	visualHitbox.Material = Enum.Material.ForceField
+	visualHitbox.Color = Color3.fromRGB(150, 0, 0) 
+	visualHitbox.Transparency = 0.5
+	visualHitbox.Parent = Workspace
+
+	local hitHas = {}
+	local duration = 0.5 
+	local startTime = tick()
+
+	task.spawn(function()
+		while tick() - startTime < duration do
+			if not root or not root.Parent then break end
+
+			local hitboxCFrame = root.CFrame * CFrame.new(0, 0, -3)
+			visualHitbox.CFrame = hitboxCFrame 
+
+			local parts = Workspace:GetPartBoundsInBox(hitboxCFrame, hitboxSize)
+			for _, p in ipairs(parts) do
+				if p.Name == "SurvWall" then break end -- Parede bloqueia a mordida
+
+				local hum = p.Parent:FindFirstChild("Humanoid")
+				if hum and not hitHas[hum] and p.Parent ~= char then
+					hitHas[hum] = true
+					customDamage(hum, 25, player)
+					-- Impede uso de habilidades
+					if p.Parent then
+						p.Parent:SetAttribute("AbilitiesLocked", true)
+						task.delay(5, function()
+							if p.Parent then p.Parent:SetAttribute("AbilitiesLocked", false) end
+						end)
+					end
+				end
+			end
+			task.wait() 
+		end
+		visualHitbox:Destroy()
+	end)
+end)
+
+evDeploy.OnServerEvent:Connect(function(player)
+	local char = player.Character
+	if not char or not table.find(activeKillers, player) or not inRound then return end
+	local root = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso")
+	if not root then return end
+
+	local hum = char:FindFirstChild("Humanoid")
+	if hum then
+		local oldSpeed = hum.WalkSpeed
+		hum.WalkSpeed = 0
+		task.delay(3, function() -- 3s de animação
+			if hum and hum.Parent then hum.WalkSpeed = oldSpeed end
+		end)
+	end
+
+	-- Puxa o modelo real do ServerStorage se existir
+	local headModel = ServerStorage:FindFirstChild("DrakHead")
+	if headModel then
+		headModel = headModel:Clone()
+	else
+		-- PLACEHOLDER
+		headModel = Instance.new("Part")
+		headModel.Name = "DrakHead"
+		headModel.Size = Vector3.new(2, 2, 2)
+		headModel.Color = Color3.fromRGB(130, 0, 130)
+		headModel.Anchored = true
+		headModel.CanCollide = false
+	end
+
+	headModel.CFrame = root.CFrame * CFrame.new(0, -2, -3)
+	headModel.Parent = Workspace
+	Debris:AddItem(headModel, 25)
+
+	setTransparency(headModel, 1)
+	for _, part in ipairs(headModel:GetDescendants()) do
+		if part:IsA("BasePart") then
+			TweenService:Create(part, TweenInfo.new(1), {Transparency = 0}):Play()
+		elseif part:IsA("Decal") then
+			TweenService:Create(part, TweenInfo.new(1), {Transparency = 0}):Play()
+		end
+	end
+	if headModel:IsA("BasePart") then
+		TweenService:Create(headModel, TweenInfo.new(1), {Transparency = 0}):Play()
+	end
+
+	task.spawn(function()
+		local hitDB = {}
+		while headModel and headModel.Parent do
+			for _, s in ipairs(survivors) do
+				local sChar = s.Character
+				if sChar then
+					local sRoot = sChar:FindFirstChild("HumanoidRootPart")
+					if sRoot and (sRoot.Position - headModel.Position).Magnitude < 8 then
+						if not hitDB[s] or tick() - hitDB[s] > 4 then
+							hitDB[s] = tick()
+
+							-- OPCIONAL: Se você tiver um Animator na cabeça, pode dar Play() na animação de morder aqui
+
+							local sHum = sChar:FindFirstChild("Humanoid")
+							if sHum then
+								customDamage(sHum, 10, player)
+								local os = sHum.WalkSpeed
+								sHum.WalkSpeed = math.max(0, sHum.WalkSpeed - 3)
+								task.delay(2, function()
+									if sHum and sHum.Parent then sHum.WalkSpeed = os end
+								end)
+								local h = Instance.new("Highlight", sChar)
+								h.FillColor = Color3.fromRGB(255, 0, 0)
+								Debris:AddItem(h, 3)
+							end
+						end
+					end
+				end
+			end
+			task.wait(0.5)
+		end
+	end)
+end)
+
+evDrak.OnServerEvent:Connect(function(player)
+	local char = player.Character
+	if not char or not table.find(activeKillers, player) or not inRound then return end
+	local root = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso")
+	if not root then return end
+
+	local drakNPC = ServerStorage:FindFirstChild("DrakNPC")
+	if drakNPC then
+		drakNPC = drakNPC:Clone()
+	else
+		-- PLACEHOLDER NPC
+		drakNPC = Instance.new("Model")
+		drakNPC.Name = "DrakNPC"
+		local dRoot = Instance.new("Part", drakNPC)
+		dRoot.Name = "HumanoidRootPart"
+		dRoot.Size = Vector3.new(2, 2, 1)
+		dRoot.Color = Color3.fromRGB(80, 0, 80)
+		local dHum = Instance.new("Humanoid", drakNPC)
+		dHum.MaxHealth = 100
+		dHum.Health = 100
+		drakNPC.PrimaryPart = dRoot
+	end
+
+	drakNPC.Parent = Workspace
+	drakNPC:PivotTo(root.CFrame * CFrame.new(0, 0, -6))
+
+	local dHum = drakNPC:FindFirstChild("Humanoid")
+	local dRoot = drakNPC:FindFirstChild("HumanoidRootPart")
+
+	task.spawn(function()
+		while drakNPC and drakNPC.Parent and dHum and dHum.Health > 0 and inRound do
+			local nearest = nil
+			local dist = 100
+			for _, s in ipairs(survivors) do
+				if s.Character and s.Character:FindFirstChild("HumanoidRootPart") and s.Character:FindFirstChild("Humanoid") and s.Character.Humanoid.Health > 0 then
+					local d = (s.Character.HumanoidRootPart.Position - dRoot.Position).Magnitude
+					if d < dist then
+						dist = d
+						nearest = s.Character.HumanoidRootPart
+					end
+				end
+			end
+
+			if nearest then
+				dHum:MoveTo(nearest.Position)
+				if dist < 4.5 then
+					local sHum = nearest.Parent:FindFirstChild("Humanoid")
+					if sHum then
+						customDamage(sHum, 15, player)
+						task.wait(1.5) -- Cooldown do ataque do NPC
+					end
+				end
+			else
+				dHum:MoveTo(dRoot.Position + Vector3.new(math.random(-15,15), 0, math.random(-15,15)))
+			end
+			task.wait(0.5)
+		end
+
+		if drakNPC and drakNPC.Parent then
+			local exp = Instance.new("Explosion")
+			exp.Position = dRoot and dRoot.Position or drakNPC:GetPivot().Position
+			exp.BlastPressure = 0
+			exp.BlastRadius = 5
+			exp.Parent = Workspace
+			drakNPC:Destroy()
+		end
+	end)
+end)
+
+
+-------------------------------------------------------------------
+-- HABILIDADES DOS SOBREVIVENTES
+-------------------------------------------------------------------
 evSurv1Reveal.OnServerInvoke = function(player)
+	if checkAbilitiesLocked(player) then return {} end
 	if not table.find(survivors, player) then return {} end
 	local revealedKillers = {}
 
@@ -520,7 +708,6 @@ evSurv1Reveal.OnServerInvoke = function(player)
 		local char = k.Character
 		if char then
 			local head = char:FindFirstChild("Head")
-			-- Checa se o Killer não está invisível (Head transparency menor que 0.9)
 			if head and head.Transparency < 0.9 then
 				table.insert(revealedKillers, char)
 			end
@@ -532,6 +719,7 @@ end
 
 
 evSurv2Throw.OnServerEvent:Connect(function(player, targetPos)
+	if checkAbilitiesLocked(player) then return end
 	if not table.find(survivors, player) then return end
 	local char = player.Character
 	if not char then return end
@@ -540,7 +728,7 @@ evSurv2Throw.OnServerEvent:Connect(function(player, targetPos)
 
 	local block = Instance.new("Part")
 	block.Size = Vector3.new(3, 3, 3)
-	block.Color = Color3.fromRGB(0, 255, 255) -- Cor do bloco (Neon)
+	block.Color = Color3.fromRGB(0, 255, 255)
 	block.Material = Enum.Material.Neon
 	block.Anchored = true
 	block.CanCollide = false
@@ -551,7 +739,7 @@ evSurv2Throw.OnServerEvent:Connect(function(player, targetPos)
 	local speed = 60
 	local duration = 2
 	local startTime = tick()
-	local hitKiller = false
+	local hitEntity = false
 
 	task.spawn(function()
 		while tick() - startTime < duration do
@@ -563,29 +751,33 @@ evSurv2Throw.OnServerEvent:Connect(function(player, targetPos)
 				local pChar = p.Parent
 				local kPlayer = Players:GetPlayerFromCharacter(pChar)
 
-				-- Se acertou um killer ativo
 				if kPlayer and table.find(activeKillers, kPlayer) then
-					hitKiller = true
+					hitEntity = true
 					local hum = pChar:FindFirstChild("Humanoid")
 					if hum then
 						local oldSpeed = hum.WalkSpeed
-						hum.WalkSpeed = 8 -- Deixa lento
+						hum.WalkSpeed = 8
 						task.delay(2, function()
 							if hum then hum.WalkSpeed = oldSpeed end
 						end)
 					end
 					break
+				elseif pChar and pChar.Name == "DrakNPC" then
+					hitEntity = true
+					local dHum = pChar:FindFirstChild("Humanoid")
+					if dHum then dHum.Health = 0 end -- Mata o NPC
+					break
 				end
 			end
-			if hitKiller then break end
+			if hitEntity then break end
 		end
 		block:Destroy()
 	end)
 end)
 
 
--- Habilidade Survivor 3 (RingShot)
 evSurv3RingShot.OnServerEvent:Connect(function(player)
+	if checkAbilitiesLocked(player) then return end
 	local char = player.Character
 	if not char then return end
 	local root = char:FindFirstChild("HumanoidRootPart")
@@ -616,19 +808,30 @@ evSurv3RingShot.OnServerEvent:Connect(function(player)
 			end
 		end
 	end
+
+	-- Lógica para Matar o DrakNPC
+	for _, obj in ipairs(Workspace:GetChildren()) do
+		if obj.Name == "DrakNPC" then
+			local dRoot = obj:FindFirstChild("HumanoidRootPart")
+			if dRoot and (dRoot.Position - hb.Position).Magnitude <= 8 then
+				local dHum = obj:FindFirstChild("Humanoid")
+				if dHum then dHum.Health = 0 end
+			end
+		end
+	end
 end)
 
 
--- Habilidade Survivor 4 (Block)
 evSurv4Block.OnServerEvent:Connect(function(player, state)
+	if checkAbilitiesLocked(player) then return end
 	if player.Character then
 		player.Character:SetAttribute("Blocking", state)
 	end
 end)
 
 
--- Habilidade Survivor 5 (Wall Summon)
 evSurv5Wall.OnServerEvent:Connect(function(player)
+	if checkAbilitiesLocked(player) then return end
 	local char = player.Character
 	if not char then return end
 	local root = char:FindFirstChild("HumanoidRootPart")
@@ -646,8 +849,8 @@ evSurv5Wall.OnServerEvent:Connect(function(player)
 end)
 
 
--- Evento de Dash do Sobrevivente (One Bounce)
 evDash.OnServerEvent:Connect(function(player)
+	if checkAbilitiesLocked(player) then return end
 	if specialMode ~= "OneBounce" then return end
 	if table.find(activeKillers, player) then return end
 
@@ -733,7 +936,6 @@ task.spawn(function()
 			continue
 		end
 
-		-- Lógica da Roleta a cada 3 rounds
 		roundCount += 1
 		if roundCount % 3 == 0 then
 			local modes = {"OneBounce", "Espiao", "DoubleTrouble"}
@@ -755,7 +957,6 @@ task.spawn(function()
 		evTransition:FireAllClients("FadeIn")
 		task.wait(1.5)
 
-		-- Atribuição de Papéis
 		if specialMode == "OneBounce" then
 			local theSurvivor = plrs[math.random(1, #plrs)]
 			table.insert(survivors, theSurvivor)
@@ -810,7 +1011,6 @@ task.spawn(function()
 
 			local isK = table.find(activeKillers, p) ~= nil
 
-			-- Setup Morphs e Habilidades (Passando o nome do personagem equipado na UI)
 			if specialMode == "Espiao" then
 				if randomSpawn then
 					local root = p.Character and (p.Character:FindFirstChild("HumanoidRootPart") or p.Character:FindFirstChild("Torso"))
@@ -848,7 +1048,6 @@ task.spawn(function()
 
 			local char = p.Character
 			if char then
-				-- Configurando colisão para não bugar com a parede do Surv 5
 				for _, part in ipairs(char:GetDescendants()) do
 					if part:IsA("BasePart") then
 						pcall(function() PhysicsService:SetPartCollisionGroup(part, isK and "Killers" or "Survivors") end)
