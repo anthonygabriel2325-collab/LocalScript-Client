@@ -29,7 +29,7 @@ local killerEvents = ReplicatedStorage:FindFirstChild("KillerEvents") or Instanc
 killerEvents.Name = "KillerEvents"
 local evBlood = getRemote("Blood", "RemoteEvent")
 evBlood.Parent = killerEvents
-local evHunter = getRemote("Hunter", "RemoteEvent")
+local evHunter = getRemoteA("Hunter", "RemoteEvent")
 evHunter.Parent = killerEvents
 local evCorruption = getRemote("Corruption", "RemoteEvent")
 evCorruption.Parent = killerEvents
@@ -602,9 +602,9 @@ evDeploy.OnServerEvent:Connect(function(player)
 					if sRoot and (sRoot.Position - headModel.Position).Magnitude < 8 then
 						if not hitDB[s] or tick() - hitDB[s] > 4 then
 							hitDB[s] = tick()
-							
+
 							-- OPCIONAL: Se você tiver um Animator na cabeça, pode dar Play() na animação de morder aqui
-							
+
 							local sHum = sChar:FindFirstChild("Humanoid")
 							if sHum then
 								customDamage(sHum, 10, player)
@@ -651,7 +651,7 @@ evDrak.OnServerEvent:Connect(function(player)
 
 	drakNPC.Parent = Workspace
 	drakNPC:PivotTo(root.CFrame * CFrame.new(0, 0, -6))
-	
+
 	local dHum = drakNPC:FindFirstChild("Humanoid")
 	local dRoot = drakNPC:FindFirstChild("HumanoidRootPart")
 
@@ -683,7 +683,7 @@ evDrak.OnServerEvent:Connect(function(player)
 			end
 			task.wait(0.5)
 		end
-		
+
 		if drakNPC and drakNPC.Parent then
 			local exp = Instance.new("Explosion")
 			exp.Position = dRoot and dRoot.Position or drakNPC:GetPivot().Position
@@ -808,7 +808,7 @@ evSurv3RingShot.OnServerEvent:Connect(function(player)
 			end
 		end
 	end
-	
+
 	-- Lógica para Matar o DrakNPC
 	for _, obj in ipairs(Workspace:GetChildren()) do
 		if obj.Name == "DrakNPC" then
